@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070b16">
+<title>RAPA AI — Smart Assistant</title>
+<style>
+:root{color-scheme:dark;--bg:#070b16;--panel:#101a2d;--line:#20395c;--blue:#168cff;--cyan:#00d9ff;--muted:#8da3c2}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#102342 0,#070b16 52%);color:#edf5ff;font:15px system-ui,Arial,sans-serif;min-height:100dvh}
+.app{max-width:900px;height:100dvh;min-height:520px;margin:auto;display:flex;flex-direction:column}
+header{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;background:#080f1ddd;backdrop-filter:blur(12px)}
+.logo{font-weight:950;letter-spacing:3px;font-size:23px;color:var(--cyan);text-shadow:0 0 18px #00d9ff55}
+.sub{font-size:10px;letter-spacing:2px;color:var(--muted);margin-top:3px}
+button{font:inherit;cursor:pointer}
+#clear{background:var(--panel);border:1px solid var(--line);color:#eaf5ff;border-radius:10px;padding:9px 12px}
+#messages{flex:1;overflow:auto;padding:22px 14px 12px;scroll-behavior:smooth}
+.welcome{text-align:center;max-width:520px;margin:12vh auto 30px}
+.orb{width:64px;height:64px;border-radius:22px;margin:0 auto 18px;display:grid;place-items:center;background:linear-gradient(135deg,#087bff,#00d9ff);box-shadow:0 0 35px #168cff55;font-size:28px;font-weight:900}
+.welcome h1{font-size:clamp(34px,8vw,48px);margin:0;color:#eafaff;letter-spacing:2px}
+.welcome h1 span{color:var(--cyan)}
+.welcome h2{font-size:19px;margin:12px 0 8px}
+.welcome p{color:var(--muted);line-height:1.65;margin:0}
+.row{display:flex;gap:10px;max-width:760px;margin:16px auto;align-items:flex-start}
+.row.user{flex-direction:row-reverse}
+.avatar{width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#087bff,#00c9ef);font-weight:800}
+.bubble{max-width:min(84%,650px);background:var(--panel);border:1px solid var(--line);border-radius:5px 15px 15px 15px;padding:12px 14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.user .bubble{background:#10294a;border-radius:15px 5px 15px 15px}
+.copy{display:block;background:none;border:0;color:var(--cyan);padding:8px 0 0;font-size:12px}
+.composer-wrap{padding:12px 14px 8px;border-top:1px solid var(--line);background:#080f1ddd}
+.composer{max-width:760px;margin:auto;display:flex;gap:9px;align-items:flex-end}
+textarea{flex:1;resize:none;min-height:48px;max-height:140px;background:#0d1729;border:1px solid #29466b;color:white;border-radius:14px;padding:13px;outline:none;font:inherit;line-height:1.4}
+textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #168cff20}
+#send{height:48px;width:50px;border:0;border-radius:14px;color:white;background:linear-gradient(135deg,#087bff,#00c9ef);font-size:21px}
+#send:disabled{opacity:.55;cursor:wait}
+#status{text-align:center;color:#8194af;font-size:11px;padding:7px 8px 2px}
+footer{text-align:center;color:#627895;font-size:10px;padding:0 10px 10px}
+@media(max-width:520px){header{padding:13px}.welcome{margin-top:9vh}.bubble{max-width:88%}#messages{padding:16px 10px}.composer-wrap{padding:10px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div><div class="logo">RAPA AI</div><div class="sub">SMART AI ASSISTANT</div></div>
+  <button id="clear" type="button">＋ Chat baru</button>
+</header>
+<main id="messages" aria-live="polite">
+  <section class="welcome" id="welcome">
+    <div class="orb">R</div>
+    <h1>RAPA <span>AI</span></h1>
+    <h2>Ada yang bisa kubantu?</h2>
+    <p>Tanyakan sesuatu, cari ide kreatif, atau minta bantuan coding. Mulai percakapanmu di bawah.</p>
+  </section>
+</main>
+<div class="composer-wrap">
+  <div class="composer">
+    <textarea id="prompt" rows="1" maxlength="8000" placeholder="Tulis pesan untuk RAPA AI..." aria-label="Pesan"></textarea>
+    <button id="send" type="button" aria-label="Kirim pesan">➤</button>
+  </div>
+  <div id="status">Siap membantu</div>
+</div>
+<footer>RAPA AI • Jawaban dapat keliru, periksa informasi penting.</footer>
+</div>
+<script>
+const messagesEl=document.getElementById("messages");
+const promptEl=document.getElementById("prompt");
+const sendBtn=document.getElementById("send");
+const statusEl=document.getElementById("status");
+let history=[];
+let busy=false;
+
+function addMessage(role,text){
+  document.getElementById("welcome")?.remove();
+  const row=document.createElement("div");
+  row.className="row "+(role==="user"?"user":"assistant");
+  const avatar=document.createElement("div");
+  avatar.className="avatar";
+  avatar.textContent=role==="user"?"K":"R";
+  const bubble=document.createElement("div");
+  bubble.className="bubble";
+  bubble.textContent=text;
+  row.append(avatar,bubble);
+  if(role==="assistant"){
+    const copy=document.createElement("button");
+    copy.className="copy";
+    copy.type="button";
+    copy.textContent="Salin jawaban";
+    copy.addEventListener("click",async()=>{
+      try{await navigator.clipboard.writeText(text);copy.textContent="Tersalin";}
+      catch{copy.textContent="Tidak bisa menyalin";}
+    });
+    bubble.appendChild(copy);
+  }
+  messagesEl.appendChild(row);
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+}
+
+function showWelcome(){
+  messagesEl.innerHTML=`<section class="welcome" id="welcome"><div class="orb">R</div><h1>RAPA <span>AI</span></h1><h2>Ada yang bisa kubantu?</h2><p>Tanyakan sesuatu, cari ide kreatif, atau minta bantuan coding. Mulai percakapanmu di bawah.</p></section>`;
+}
+
+async function sendMessage(){
+  const text=promptEl.value.trim();
+  if(!text||busy)return;
+  busy=true;sendBtn.disabled=true;
+  promptEl.value="";promptEl.style.height="48px";
+  history.push({role:"user",content:text});
+  history=history.slice(-30);
+  addMessage("user",text);
+
+  const loading=document.createElement("div");
+  loading.className="row";
+  const avatar=document.createElement("div");
+  avatar.className="avatar";avatar.textContent="R";
+  const bubble=document.createElement("div");
+  bubble.className="bubble";bubble.textContent="RAPA AI sedang berpikir...";
+  loading.append(avatar,bubble);messagesEl.appendChild(loading);
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+  statusEl.textContent="Menghubungi layanan AI...";
+
+  try{
+    const response=await fetch("/api/chat",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({messages:history})
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||"Permintaan gagal ("+response.status+").");
+    if(typeof data.reply!=="string")throw new Error("Jawaban server tidak valid.");
+    history.push({role:"assistant",content:data.reply});
+    history=history.slice(-30);
+    loading.remove();
+    addMessage("assistant",data.reply);
+    statusEl.textContent="Jawaban diterima";
+  }catch(error){
+    loading.remove();
+    history.pop();
+    addMessage("assistant","Maaf, belum bisa menjawab. "+error.message);
+    statusEl.textContent="Ada masalah saat menghubungi AI";
+  }finally{
+    busy=false;sendBtn.disabled=false;promptEl.focus();
+  }
+}
+
+sendBtn.addEventListener("click",sendMessage);
+promptEl.addEventListener("keydown",event=>{
+  if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendMessage();}
+});
+promptEl.addEventListener("input",()=>{
+  promptEl.style.height="48px";
+  promptEl.style.height=Math.min(promptEl.scrollHeight,140)+"px";
+});
+document.getElementById("clear").addEventListener("click",()=>{
+  if(busy)return;
+  history=[];showWelcome();statusEl.textContent="Percakapan baru dimulai";
+});
+</script>
+</body>
+</html>
